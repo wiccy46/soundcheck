@@ -7,6 +7,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
 use std::env;
+use std::path::Path;
 use url::Url;
 
 use rodio::source::UniformSourceIterator;
@@ -29,11 +30,21 @@ async fn fetch_beam_groups(_base_url: &Url) -> Result<Vec<BeamGroup>, Box<dyn Er
    Ok(response)
 }
 
+fn cleanup(f: &str) {
+   if Path::new(&f).exists() {
+      std::fs::remove_file(&f).unwrap();
+   } else {
+      println!("File {} does not exist", f);
+   }
+}
+
 
 #[tokio::main]
 async fn main() {
    let base_url_str = env::var("NEBULA_API_URL").unwrap_or_else(|_| "http://localhost:5555".to_string());
    let base_url = Url::parse(&base_url_str).expect("Failed to parse BASE_URL");
+   
+   let filepath = "/home/jjy/Workspace/soundcheck/resources/to_play.mp3";
 
    let current_dir = env::current_dir().unwrap();
    println!("Current directory: {}", current_dir.display());
@@ -68,8 +79,8 @@ async fn main() {
       ch_gains[i] = 1.0;
       let ch = i + 1;
 
-      save_to_file(ch.to_string().as_str(), "/home/jjy/Workspace/soundcheck/resources/to_play.mp3");
-      let file = File::open("/home/jjy/Workspace/soundcheck/resources/to_play.mp3").unwrap();
+      save_to_file(ch.to_string().as_str(), filepath);
+      let file = File::open(filepath).unwrap();
       let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
 
       let resample: UniformSourceIterator<Decoder<BufReader<File>>, i16> = UniformSourceIterator::new(source, 1, device_sr);
@@ -78,4 +89,5 @@ async fn main() {
       play(&sink, &resample_buffer, ch_gains);
    }
    sink.sleep_until_end();
+   cleanup(&filepath);
 }
