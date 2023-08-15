@@ -1418,12 +1418,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sample"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc0966ad788ec7289562643e05c611b7853e0618b7f9306aafd2fc727abfe168"
-
-[[package]]
 name = "schannel"
 version = "0.1.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1572,7 +1566,6 @@ dependencies = [
  "gtts",
  "reqwest",
  "rodio",
- "sample",
  "serde",
  "serde_json",
  "tokio",

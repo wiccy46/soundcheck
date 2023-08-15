@@ -9,7 +9,9 @@ use std::io::BufReader;
 use std::env;
 use url::Url;
 
-use audio::audio::{get_output_stream,play};
+use rodio::source::UniformSourceIterator;
+
+use audio::audio::{get_output_stream, play, ResampleBuffer};
 
 
 #[derive(Debug, Deserialize)]
@@ -53,7 +55,8 @@ async fn main() {
    println!("Found system beam groups: {}", has_beam_groups);
 
    // list_host_devices();
-   let (_stream, stream_handle) = get_output_stream("default");
+   let (_stream, stream_handle, device_sr) = get_output_stream("default");
+   println!("Device sample rate: {}", device_sr);
 
    let sink = Sink::try_new(&stream_handle).unwrap();
 
@@ -64,12 +67,15 @@ async fn main() {
       let mut ch_gains = zeros.clone();
       ch_gains[i] = 1.0;
       let ch = i + 1;
+
       save_to_file(ch.to_string().as_str(), "/home/jjy/Workspace/soundcheck/resources/to_play.mp3");
-      let file = File::open("/home/jjy/Workspace/soundcheck/resources/sound.mp3").unwrap();
+      let file = File::open("/home/jjy/Workspace/soundcheck/resources/to_play.mp3").unwrap();
       let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
-      let source_buffer = source.buffered();
-      play(&sink, &source_buffer, ch_gains);
-   
+
+      let resample: UniformSourceIterator<Decoder<BufReader<File>>, i16> = UniformSourceIterator::new(source, 1, device_sr);
+      let resample_buffer: ResampleBuffer= resample.buffered();
+
+      play(&sink, &resample_buffer, ch_gains);
    }
    sink.sleep_until_end();
 }
