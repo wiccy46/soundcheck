@@ -1,14 +1,14 @@
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
-use rodio::source::{ Buffered, ChannelVolume, Source };
+use rodio::source::UniformSourceIterator;
+use rodio::source::{Buffered, ChannelVolume, Source};
 use rodio::*;
 use std::fs::File;
 use std::io::BufReader;
-use rodio::source::UniformSourceIterator;
 
 pub type ResampleBuffer = Buffered<UniformSourceIterator<Decoder<BufReader<File>>, i16>>;
 
-
 pub fn list_host_devices() {
+    println!("---- Listing host devices: ----");
     let host = cpal::default_host();
     let devices = host.output_devices().unwrap();
     for device in devices {
@@ -16,6 +16,7 @@ pub fn list_host_devices() {
         let dev_name: String = dev.name().unwrap();
         println!(" # Device : {}", dev_name);
     }
+    println!("---- Completed ----");
 }
 
 pub fn get_output_stream(device_name: &str) -> (OutputStream, OutputStreamHandle, u32) {
