@@ -71,6 +71,15 @@ async fn main() {
                 .default_value("default"),
         )
         .arg(
+            Arg::with_name("channels")
+                .short("c")
+                .long("channels")
+                .value_name("CHANNELS")
+                .help("Number of channels to play on")
+                .takes_value(true)
+                .default_value("2"),
+        )
+        .arg(
             Arg::with_name("help")
                 .short("h")
                 .long("help")
@@ -112,11 +121,8 @@ async fn main() {
             has_beam_groups = false;
         }
     }
-
-    // If has beam groups, use them to figure out which channels to play.
     println!("Found system beam groups: {}", has_beam_groups);
 
-    // list_host_devices();
     let (_stream, stream_handle, device_sr) = get_output_stream(&device);
     println!("Device sample rate: {}", device_sr);
 
