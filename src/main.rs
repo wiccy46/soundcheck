@@ -136,6 +136,7 @@ async fn main() {
             // Here if error, then don't use active_channels_map, just play some 
             // fixed channels. 
             has_active_channels = false;
+            println!("Failed to find active channels, play fix channels instead.");
             println!("Error: {}", e);
         }
     }
