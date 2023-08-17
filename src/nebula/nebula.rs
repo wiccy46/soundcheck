@@ -1,19 +1,11 @@
 use reqwest;
 use serde::Deserialize;
-use std::error::Error;
+use std::{error::Error, collections::HashMap};
 use url::Url;
 
 
 #[derive(Debug, Deserialize)]
-pub struct Beam {
-    id: String,
-    name: String,
-}
-
-
-#[derive(Debug, Deserialize)]
 pub struct BeamInstance {
-    beam_group_id: String,
     beam_id: String,
     id: String,
 }
@@ -22,7 +14,6 @@ pub struct BeamInstance {
 #[derive(Debug, Deserialize)]
 pub struct BeamGroup {
     id: String,
-    name: String,
     beam_instance_ids: Vec<String>,
 }
 
@@ -44,14 +35,26 @@ struct Preset {
 struct AudioInput {
     id: String,
     name: String,
-    index: u16,
+}
+
+
+#[derive(Debug, Deserialize)]
+struct BeamAudioInput {
+    beam_instance_id: String,
+    audio_input_id: String,
+}
+
+
+#[derive(Debug, Deserialize)]
+struct AudioInputStreamMapping {
+    audio_input_id: String,
+    channel: u16,
 }
 
 
 async fn fetch_preset_id(_base_url: &Url, id: &String) -> Result<Preset, Box<dyn Error>> {
     let param = "presets/";
     let endpoint = _base_url.join(&format!("{}{}", param, id))?;
-    println!("Endpoint: {}", endpoint);
     let response: Preset = reqwest::get(endpoint).await?.json().await?;
     Ok(response)
 }
@@ -80,13 +83,6 @@ async fn fetch_beam_instances(_base_url: &Url) -> Result<Vec<BeamInstance>, Box<
     Ok(response)
 }
 
-async fn fetch_beams(_base_url: &Url) -> Result<Vec<Beam>, Box<dyn Error>> {
-    let param = "beams";
-    let endpoint = _base_url.join(param)?;
-    let response: Vec<Beam> = reqwest::get(endpoint).await?.json().await?;
-    Ok(response)
-}
-
 
 async fn fetch_audio_inputs(_base_url: &Url) -> Result<Vec<AudioInput>, Box<dyn Error>> {
     let param = "audio-inputs";
@@ -95,9 +91,29 @@ async fn fetch_audio_inputs(_base_url: &Url) -> Result<Vec<AudioInput>, Box<dyn 
     Ok(response)
 }
 
-pub async fn active_beams(_base_url: &Url) -> Result<(), String>{
+
+async fn fetch_beam_audio_inputs(_base_url: &Url) -> Result<Vec<BeamAudioInput>, Box<dyn Error>> {
+    let param = "beam-audio-inputs";
+    let endpoint = _base_url.join(param)?;
+    let response: Vec<BeamAudioInput> = reqwest::get(endpoint).await?.json().await?;
+    Ok(response)
+}
+
+
+async fn fetch_audio_input_stream_mappings(_base_url: &Url) -> Result<Vec<AudioInputStreamMapping>, Box<dyn Error>> {
+    let param = "audio-input-stream-mappings";
+    let endpoint = _base_url.join(param)?;
+    let response: Vec<AudioInputStreamMapping> = reqwest::get(endpoint).await?.json().await?;
+    Ok(response)
+}
+
+
+pub async fn active_channels(_base_url: &Url) -> Result<HashMap<String, i16>, String>{
     let mut preset: String = String::from("");
     let mut beam_groups_ids: Vec<String> = Vec::new();
+
+    println!("Finding channel routing ...");
+
     match fetch_spaces(&_base_url).await {
         Ok(spaces) => {
             let fst = spaces.first().unwrap();
@@ -107,7 +123,6 @@ pub async fn active_beams(_base_url: &Url) -> Result<(), String>{
                 return Err("active preset is empty".to_string());
             }
             preset = fst.active_preset_id.clone();
-            println!("Active preset id: {}", preset);
         }
         Err(e) => {
             println!("Error: {}", e);
@@ -130,9 +145,6 @@ pub async fn active_beams(_base_url: &Url) -> Result<(), String>{
         Ok(beam_groups) => {
             for bg in beam_groups {
                 if beam_groups_ids.contains(&bg.id) {
-                    println!("Beam group id: {}", bg.id);
-                    println!("Beam group name: {}", bg.name);
-                    println!("Beam group beam instance ids: {:?}", bg.beam_instance_ids);
                     beam_instances_ids.extend(bg.beam_instance_ids);
                 }
             }
@@ -148,7 +160,6 @@ pub async fn active_beams(_base_url: &Url) -> Result<(), String>{
         Ok(beam_instances) => {
             for bi in beam_instances {
                 if beam_instances_ids.contains(&bi.id) {
-                    println!("Beam instance beam id: {}", bi.beam_id);
                     beam_ids.push(bi.beam_id);
                 }
             }
@@ -158,14 +169,15 @@ pub async fn active_beams(_base_url: &Url) -> Result<(), String>{
         }
     }
 
-    let mut beam_names: Vec<String> = Vec::new();
+    let mut audio_input_ids: Vec<String> = Vec::new();
 
-    match fetch_beams(&_base_url).await {
-        Ok(beams) => {
-            for b in beams {
-                if beam_ids.contains(&b.id) {
-                    println!("Beam name: {}", b.name);
-                    beam_names.push(b.name);
+    match fetch_beam_audio_inputs(&_base_url).await {
+        Ok(beam_audio_inputs) => {
+            for bai in beam_audio_inputs {
+                if beam_instances_ids.contains(&bai.beam_instance_id) {
+                    if !audio_input_ids.contains(&bai.audio_input_id) {
+                        audio_input_ids.push(bai.audio_input_id);
+                    }
                 }
             }
         }
@@ -173,14 +185,16 @@ pub async fn active_beams(_base_url: &Url) -> Result<(), String>{
             println!("Error: {}", e);
         }
     }
+
+    let mut active_audio_input_ids: Vec<String> = Vec::new();
+    let mut active_audio_input_map: HashMap<String, String> = HashMap::new();
 
     match fetch_audio_inputs(&_base_url).await {
         Ok(audio_inputs) => {
             for ai in audio_inputs {
-                if beam_names.contains(&ai.name) {
-                    println!("Audio input id: {}", ai.id);
-                    println!("Audio input name: {}", ai.name);
-                    println!("Audio input index: {}", ai.index);
+                if audio_input_ids.contains(&ai.id) {
+                    active_audio_input_ids.push(ai.id.clone());
+                    active_audio_input_map.insert(ai.id, ai.name.clone());
                 }
             }
         }
@@ -189,7 +203,20 @@ pub async fn active_beams(_base_url: &Url) -> Result<(), String>{
         }
     }
 
+    let mut active_channels: HashMap<String, i16> = HashMap::new();
 
+    match fetch_audio_input_stream_mappings(&_base_url).await {
+        Ok(audio_input_stream_mappings) => {
+            for aism in audio_input_stream_mappings {
+                if active_audio_input_ids.contains(&aism.audio_input_id) {
+                    active_channels.insert(active_audio_input_map.get(&aism.audio_input_id).unwrap().clone(), aism.channel as i16);
+                }
+            }
+        }
+        Err(e) => {
+            println!("Error: {}", e);
+        }
+    }
 
-    return Ok(());
+    return Ok(active_channels);
 }

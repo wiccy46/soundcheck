@@ -5,16 +5,17 @@ use clap::{App, Arg};
 use gtts::save_to_file;
 use rodio::*;
 use std::fs::File;
+use std::collections::HashMap;
 use std::io::BufReader;
 use std::{thread, time};
 use std::path::Path;
-use std::{default, env};
+use std::env;
 use url::Url;
 
 use rodio::source::UniformSourceIterator;
 
 use audio::audio::{get_output_stream, list_host_devices, play, ResampleBuffer};
-use nebula::nebula::{active_beams};
+use nebula::nebula::active_channels;
 
 fn cleanup(f: &Path) {
     if Path::new(&f).exists() {
@@ -117,13 +118,37 @@ async fn main() {
     let current_dir = env::current_dir().unwrap();
     let filepath = current_dir.join("resources/to_play.mp3");
 
-    active_beams(&base_url).await; 
+    let mut active_channels_map: HashMap<String, i16> = HashMap::new();
+    
+    let ac_result = active_channels(&base_url).await; 
 
+    let mut has_active_channels: bool = true;
+
+    match ac_result {
+        Ok(ac) => {
+            active_channels_map = ac;
+            println!("Active channels: ");
+            for (k, v) in &active_channels_map {
+                println!("{}: {}", k, v);
+            }
+        }
+        Err(e) => {
+            // Here if error, then don't use active_channels_map, just play some 
+            // fixed channels. 
+            has_active_channels = false;
+            println!("Error: {}", e);
+        }
+    }
+        
     let (_stream, stream_handle, device_sr) = get_output_stream(&device);
     println!("Device sample rate: {}", device_sr);
 
     let sink = Sink::try_new(&stream_handle).unwrap();
 
+    // This is a hack. Currently RME only give 8. Need major rework to the audio 
+    // stream to make full use of the channels. May need to do it in pure cpal.
+
+    let device_max_channels = 8;
     // For each beam or audio routing, generate a tts file and then play it.
     let channels = 2;
     for _ in 0..1 {
