@@ -33,16 +33,22 @@ fn gain_validator(val: String) -> Result<(), String> {
 }
 
 
-fn play_loop(channels: usize, channel_map: &BTreeMap<u16, String>, gain: f32, device_sr: u32, filepath: &Path, sink: &Sink) {
+fn play_loop(channels: usize, channel_map: &BTreeMap<u16, String>, gain: f32, device_sr: u32, filepath: &Path, sink: &Sink, receiver_mode: bool) {
     let zeros = vec![0.0f32; channels];
     for (key, value) in channel_map.iter() {
         let i = key.clone() as usize;
         if i <= channels {
             let mut ch_gains = zeros.clone();
             ch_gains[i] = gain;
-            let ch = i + 1;
+            let mut content: String;
+            if receiver_mode {
+                content = format!("{}, checked", value);
+            } else {
+                let ch = i + 1;
+                content = ch.to_string();
+            }
 
-            save_to_file(ch.to_string().as_str(), filepath.to_str().unwrap());
+            save_to_file(content.as_str(), filepath.to_str().unwrap());
             let file = File::open(filepath.clone()).unwrap();
             let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
 
@@ -83,13 +89,13 @@ async fn main() {
                 .default_value("default"),
         )
         .arg(
-            Arg::with_name("channels")
-                .short("c")
-                .long("channels")
-                .value_name("CHANNELS")
-                .help("Number of channels to play on")
-                .takes_value(true)
-                .default_value("2"),
+            Arg::with_name("receivers")
+                .short("r")
+                .long("receivers")
+                .value_name("RECEIVERS")
+                .help("If set to true, speake out the name of the receivers")
+                .takes_value(false)
+                .default_value("false"),
         )
         .arg(
             Arg::with_name("help")
@@ -150,6 +156,9 @@ async fn main() {
         
     let sink = Sink::try_new(&stream_handle).unwrap();
 
+
+    let receiver_mode = matches.is_present("receivers");
+
     // For each beam or audio routing, generate a tts file and then play it.
     for _ in 0..1 {
         play_loop(
@@ -158,7 +167,8 @@ async fn main() {
             gain, 
             device_sr, 
             &filepath, 
-            &sink
+            &sink,
+            receiver_mode
         );
     }
 
