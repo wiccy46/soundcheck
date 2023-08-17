@@ -31,9 +31,10 @@ pub fn get_output_stream(device_name: &str) -> (OutputStream, OutputStreamHandle
             println!("Device found: {}", dev_name);
             sr = dev.default_output_config().unwrap().sample_rate().0;
             (_stream, stream_handle) = OutputStream::try_from_device(&dev).unwrap();
+            return (_stream, stream_handle, sr);
         }
     }
-    return (_stream, stream_handle, sr);
+    panic!("Device not found");
 }
 
 pub fn play(sink: &Sink, source: &ResampleBuffer, ch_vol: Vec<f32>) {
