@@ -5,7 +5,7 @@ use clap::{App, Arg};
 use gtts::save_to_file;
 use rodio::*;
 use std::fs::File;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io::BufReader;
 use std::{thread, time};
 use std::path::Path;
@@ -33,10 +33,10 @@ fn gain_validator(val: String) -> Result<(), String> {
 }
 
 
-fn play_loop(channels: usize, channel_map: &HashMap<String, u16>, gain: f32, device_sr: u32, filepath: &Path, sink: &Sink) {
+fn play_loop(channels: usize, channel_map: &BTreeMap<u16, String>, gain: f32, device_sr: u32, filepath: &Path, sink: &Sink) {
     let zeros = vec![0.0f32; channels];
     for (key, value) in channel_map.iter() {
-        let i = value.clone() as usize;
+        let i = key.clone() as usize;
         if i <= channels {
             let mut ch_gains = zeros.clone();
             ch_gains[i] = gain;
@@ -121,7 +121,7 @@ async fn main() {
     let current_dir = env::current_dir().unwrap();
     let filepath = current_dir.join("resources/to_play.mp3");
 
-    let mut active_channels_map: HashMap<String, u16> = HashMap::new();
+    let mut active_channels_map: BTreeMap<u16, String> = BTreeMap::new();
 
     let (_stream, stream_handle, device_sr, default_outputs) = get_output_stream(&device);
     println!("Device sample rate: {}", device_sr);
@@ -141,7 +141,7 @@ async fn main() {
         Err(e) => {
             // Create a default channel map based on default outputs
             for i in 0..default_outputs {
-                active_channels_map.insert(i.to_string(), i);
+                active_channels_map.insert(i, i.to_string());
             }
             println!("Failed to find active channels, play on all default channels.");
             println!("Error: {}", e);

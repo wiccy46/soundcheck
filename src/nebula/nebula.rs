@@ -1,6 +1,7 @@
 use reqwest;
 use serde::Deserialize;
-use std::{collections::HashMap, error::Error};
+use std::collections::{BTreeMap,HashMap};
+use std::error::Error;
 use url::Url;
 
 #[derive(Debug, Deserialize)]
@@ -95,7 +96,7 @@ async fn fetch_audio_input_stream_mappings(
     Ok(response)
 }
 
-pub async fn active_channels(_base_url: &Url) -> Result<HashMap<String, u16>, String> {
+pub async fn active_channels(_base_url: &Url) -> Result<BTreeMap<u16, String>, String> {
     println!("Finding channel routing ...");
     let mut preset: String = String::from("");
     let mut beam_groups_ids: Vec<String>;
@@ -164,7 +165,7 @@ pub async fn active_channels(_base_url: &Url) -> Result<HashMap<String, u16>, St
         }
     }
 
-    let mut active_channels: HashMap<String, u16> = HashMap::new();
+    let mut active_channels: BTreeMap<u16, String> = BTreeMap::new();
 
     let audio_input_stream_mappings = fetch_audio_input_stream_mappings(&_base_url)
         .await
@@ -172,11 +173,11 @@ pub async fn active_channels(_base_url: &Url) -> Result<HashMap<String, u16>, St
     for aism in audio_input_stream_mappings {
         if active_audio_input_ids.contains(&aism.audio_input_id) {
             active_channels.insert(
+                aism.channel as u16,
                 active_audio_input_map
                     .get(&aism.audio_input_id)
                     .unwrap()
                     .clone(),
-                aism.channel as u16,
             );
         }
     }
