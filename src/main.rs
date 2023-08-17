@@ -1,13 +1,12 @@
 mod audio;
+mod nebula;
 
 use clap::{App, Arg};
 use gtts::save_to_file;
-use reqwest;
 use rodio::*;
-use serde::Deserialize;
-use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
+use std::{thread, time};
 use std::path::Path;
 use std::{default, env};
 use url::Url;
@@ -15,20 +14,7 @@ use url::Url;
 use rodio::source::UniformSourceIterator;
 
 use audio::audio::{get_output_stream, list_host_devices, play, ResampleBuffer};
-
-#[derive(Debug, Deserialize)]
-struct BeamGroup {
-    id: String,
-    space_id: String,
-    name: String,
-    beam_instance_ids: Vec<String>,
-}
-
-async fn fetch_beam_groups(_base_url: &Url) -> Result<Vec<BeamGroup>, Box<dyn Error>> {
-    let endpoint = _base_url.join("beam-groups")?;
-    let response: Vec<BeamGroup> = reqwest::get(endpoint).await?.json().await?;
-    Ok(response)
-}
+use nebula::nebula::{active_beams};
 
 fn cleanup(f: &Path) {
     if Path::new(&f).exists() {
@@ -44,6 +30,28 @@ fn gain_validator(val: String) -> Result<(), String> {
         _ => Err(String::from("Gain must be a float between 0.0 and 1.0")),
     }
 }
+
+
+fn play_loop(channels: usize, gain: f32, device_sr: u32, filepath: &Path, sink: &Sink) {
+    let zeros = vec![0.0f32; channels];
+    for i in 0..channels {
+        let mut ch_gains = zeros.clone();
+        ch_gains[i] = gain;
+        let ch = i + 1;
+
+        save_to_file(ch.to_string().as_str(), filepath.to_str().unwrap());
+        let file = File::open(filepath.clone()).unwrap();
+        let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
+
+        let resample: UniformSourceIterator<Decoder<BufReader<File>>, i16> =
+            UniformSourceIterator::new(source, 1, device_sr);
+        let resample_buffer: ResampleBuffer = resample.buffered();
+
+        play(&sink, &resample_buffer, ch_gains);
+        thread::sleep(time::Duration::from_millis(1000));
+    }
+}
+
 
 #[tokio::main]
 async fn main() {
@@ -109,19 +117,7 @@ async fn main() {
     let current_dir = env::current_dir().unwrap();
     let filepath = current_dir.join("resources/to_play.mp3");
 
-    let mut has_beam_groups = true;
-    match fetch_beam_groups(&base_url).await {
-        Ok(beam_groups) => {
-            for group in beam_groups {
-                println!("{:?}", group.id);
-            }
-        }
-        Err(e) => {
-            println!("Error: {}", e);
-            has_beam_groups = false;
-        }
-    }
-    println!("Found system beam groups: {}", has_beam_groups);
+    active_beams(&base_url).await; 
 
     let (_stream, stream_handle, device_sr) = get_output_stream(&device);
     println!("Device sample rate: {}", device_sr);
@@ -130,22 +126,10 @@ async fn main() {
 
     // For each beam or audio routing, generate a tts file and then play it.
     let channels = 2;
-    let zeros = vec![0.0f32; channels];
-    for i in 0..channels {
-        let mut ch_gains = zeros.clone();
-        ch_gains[i] = gain;
-        let ch = i + 1;
-
-        save_to_file(ch.to_string().as_str(), filepath.to_str().unwrap());
-        let file = File::open(filepath.clone()).unwrap();
-        let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
-
-        let resample: UniformSourceIterator<Decoder<BufReader<File>>, i16> =
-            UniformSourceIterator::new(source, 1, device_sr);
-        let resample_buffer: ResampleBuffer = resample.buffered();
-
-        play(&sink, &resample_buffer, ch_gains);
+    for _ in 0..1 {
+        play_loop(channels, gain, device_sr, &filepath, &sink);
     }
+
     sink.sleep_until_end();
     cleanup(&filepath);
 }
