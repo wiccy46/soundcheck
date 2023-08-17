@@ -33,23 +33,26 @@ fn gain_validator(val: String) -> Result<(), String> {
 }
 
 
-fn play_loop(channels: usize, gain: f32, device_sr: u32, filepath: &Path, sink: &Sink) {
+fn play_loop(channels: usize, channel_map: &HashMap<String, u16>, gain: f32, device_sr: u32, filepath: &Path, sink: &Sink) {
     let zeros = vec![0.0f32; channels];
-    for i in 0..channels {
-        let mut ch_gains = zeros.clone();
-        ch_gains[i] = gain;
-        let ch = i + 1;
+    for (key, value) in channel_map.iter() {
+        let i = value.clone() as usize;
+        if i <= channels {
+            let mut ch_gains = zeros.clone();
+            ch_gains[i] = gain;
+            let ch = i + 1;
 
-        save_to_file(ch.to_string().as_str(), filepath.to_str().unwrap());
-        let file = File::open(filepath.clone()).unwrap();
-        let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
+            save_to_file(ch.to_string().as_str(), filepath.to_str().unwrap());
+            let file = File::open(filepath.clone()).unwrap();
+            let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
 
-        let resample: UniformSourceIterator<Decoder<BufReader<File>>, i16> =
-            UniformSourceIterator::new(source, 1, device_sr);
-        let resample_buffer: ResampleBuffer = resample.buffered();
+            let resample: UniformSourceIterator<Decoder<BufReader<File>>, i16> =
+                UniformSourceIterator::new(source, 1, device_sr);
+            let resample_buffer: ResampleBuffer = resample.buffered();
 
-        play(&sink, &resample_buffer, ch_gains);
-        thread::sleep(time::Duration::from_millis(1000));
+            play(&sink, &resample_buffer, ch_gains);
+            thread::sleep(time::Duration::from_millis(1000));
+        }
     }
 }
 
@@ -118,11 +121,14 @@ async fn main() {
     let current_dir = env::current_dir().unwrap();
     let filepath = current_dir.join("resources/to_play.mp3");
 
-    let mut active_channels_map: HashMap<String, i16> = HashMap::new();
-    
-    let ac_result = active_channels(&base_url).await; 
+    let mut active_channels_map: HashMap<String, u16> = HashMap::new();
 
-    let mut has_active_channels: bool = true;
+    let (_stream, stream_handle, device_sr, default_outputs) = get_output_stream(&device);
+    println!("Device sample rate: {}", device_sr);
+    println!("Device default outputs: {}", default_outputs);
+
+    // Look at the Nebula API to find active channels 
+    let ac_result = active_channels(&base_url).await; 
 
     match ac_result {
         Ok(ac) => {
@@ -133,27 +139,27 @@ async fn main() {
             }
         }
         Err(e) => {
-            // Here if error, then don't use active_channels_map, just play some 
-            // fixed channels. 
-            has_active_channels = false;
-            println!("Failed to find active channels, play fix channels instead.");
+            // Create a default channel map based on default outputs
+            for i in 0..default_outputs {
+                active_channels_map.insert(i.to_string(), i);
+            }
+            println!("Failed to find active channels, play on all default channels.");
             println!("Error: {}", e);
         }
     }
         
-    let (_stream, stream_handle, device_sr) = get_output_stream(&device);
-    println!("Device sample rate: {}", device_sr);
-
     let sink = Sink::try_new(&stream_handle).unwrap();
 
-    // This is a hack. Currently RME only give 8. Need major rework to the audio 
-    // stream to make full use of the channels. May need to do it in pure cpal.
-
-    let device_max_channels = 8;
     // For each beam or audio routing, generate a tts file and then play it.
-    let channels = 2;
     for _ in 0..1 {
-        play_loop(channels, gain, device_sr, &filepath, &sink);
+        play_loop(
+            default_outputs as usize,
+            &active_channels_map,
+            gain, 
+            device_sr, 
+            &filepath, 
+            &sink
+        );
     }
 
     sink.sleep_until_end();
