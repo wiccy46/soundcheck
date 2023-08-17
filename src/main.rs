@@ -40,7 +40,7 @@ fn play_loop(channels: usize, channel_map: &BTreeMap<u16, String>, gain: f32, de
         if i <= channels {
             let mut ch_gains = zeros.clone();
             ch_gains[i] = gain;
-            let mut content: String;
+            let content: String;
             if receiver_mode {
                 content = format!("{}, checked", value);
             } else {

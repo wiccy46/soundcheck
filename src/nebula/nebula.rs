@@ -98,9 +98,6 @@ async fn fetch_audio_input_stream_mappings(
 
 pub async fn active_channels(_base_url: &Url) -> Result<BTreeMap<u16, String>, String> {
     println!("Finding channel routing ...");
-    let mut preset: String = String::from("");
-    let mut beam_groups_ids: Vec<String>;
-
     let spaces = fetch_spaces(&_base_url).await.map_err(|e| e.to_string())?;
 
     let fst = spaces.first().unwrap();
@@ -109,12 +106,12 @@ pub async fn active_channels(_base_url: &Url) -> Result<BTreeMap<u16, String>, S
         println!("Active preset id is empty");
         return Err("active preset is empty".to_string());
     }
-    preset = fst.active_preset_id.clone();
+    let preset = fst.active_preset_id.clone();
 
     let preset_res = fetch_preset_id(&_base_url, &preset)
         .await
         .map_err(|e| e.to_string())?;
-    beam_groups_ids = preset_res.beam_group_ids;
+    let beam_groups_ids = preset_res.beam_group_ids;
     println!("Active preset name: {}", preset_res.name);
 
     let mut beam_instances_ids: Vec<String> = Vec::new();

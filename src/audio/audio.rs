@@ -1,6 +1,6 @@
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use rodio::source::UniformSourceIterator;
-use rodio::source::{Buffered, ChannelVolume, Source};
+use rodio::source::{Buffered, ChannelVolume};
 use rodio::*;
 use std::fs::File;
 use std::io::BufReader;
