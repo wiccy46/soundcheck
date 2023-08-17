@@ -135,7 +135,7 @@ async fn main() {
             active_channels_map = ac;
             println!("Active channels: ");
             for (k, v) in &active_channels_map {
-                println!("{}: {}", k, v);
+                println!("{}: {}", v, k + 1);
             }
         }
         Err(e) => {
