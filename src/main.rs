@@ -94,8 +94,7 @@ async fn main() {
                 .long("receivers")
                 .value_name("RECEIVERS")
                 .help("If set to true, speake out the name of the receivers")
-                .takes_value(false)
-                .default_value("false"),
+                .takes_value(false),
         )
         .arg(
             Arg::with_name("help")
