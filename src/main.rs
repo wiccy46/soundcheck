@@ -1,39 +1,35 @@
 mod audio;
 mod nebula;
+mod utils;
 
 use clap::{App, Arg};
 use gtts::save_to_file;
 use rodio::*;
-use std::fs::File;
 use std::collections::BTreeMap;
-use std::io::BufReader;
-use std::{thread, time};
-use std::path::Path;
 use std::env;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+use std::{thread, time};
 use url::Url;
 
 use rodio::source::UniformSourceIterator;
 
 use audio::audio::{get_output_stream, list_host_devices, play, ResampleBuffer};
 use nebula::nebula::active_channels;
-
-fn cleanup(f: &Path) {
-    if Path::new(&f).exists() {
-        std::fs::remove_file(&f).unwrap();
-    } else {
-        println!("File {} does not exist", f.display());
-    }
-}
-
-fn gain_validator(val: String) -> Result<(), String> {
-    match val.parse::<f32>() {
-        Ok(v) if v >= 0.0 && v <= 1.0 => Ok(()),
-        _ => Err(String::from("Gain must be a float between 0.0 and 1.0")),
-    }
-}
+use utils::utils::{linear_gain_validator, remove};
 
 
-fn play_loop(channels: usize, channel_map: &BTreeMap<u16, String>, gain: f32, device_sr: u32, filepath: &Path, sink: &Sink, receiver_mode: bool) {
+// Base on the channel map, play sound on each channel with out channels muted
+fn play_on_each_ch(
+    channels: usize,
+    channel_map: &BTreeMap<u16, String>,
+    gain: f32,
+    device_sr: u32,
+    filepath: &Path,
+    sink: &Sink,
+    receiver_mode: bool,
+) {
     let zeros = vec![0.0f32; channels];
     for (key, value) in channel_map.iter() {
         let i = key.clone() as usize;
@@ -62,7 +58,6 @@ fn play_loop(channels: usize, channel_map: &BTreeMap<u16, String>, gain: f32, de
     }
 }
 
-
 #[tokio::main]
 async fn main() {
     let app = App::new("Soundcheck")
@@ -86,7 +81,7 @@ async fn main() {
                 .help("Sets the linear gain, range 0 -- 1.0")
                 .takes_value(true)
                 .default_value("1.0")
-                .validator(gain_validator),
+                .validator(linear_gain_validator),
         )
         .arg(
             Arg::with_name("generic")
@@ -144,8 +139,7 @@ async fn main() {
     let base_url = Url::parse(&base_url_str).expect("Failed to parse BASE_URL");
 
     let device = matches.value_of("device").unwrap();
-    let current_dir = env::current_dir().unwrap();
-    let filepath = current_dir.join("resources/to_play.mp3");
+    let filepath = env::current_dir().unwrap().join("resources/to_play.mp3");
 
     let mut active_channels_map: BTreeMap<u16, String> = BTreeMap::new();
 
@@ -158,8 +152,8 @@ async fn main() {
     let (_stream, stream_handle, default_outputs) = get_output_stream(&device, sr);
     println!("Device default outputs: {}", default_outputs);
 
-    // Look at the Nebula API to find active channels 
-    let ac_result = active_channels(&base_url).await; 
+    // Look at the Nebula API to find active channels
+    let ac_result = active_channels(&base_url).await;
 
     let generic_mode = matches.is_present("generic");
     let mut receiver_mode = matches.is_present("receivers");
@@ -188,21 +182,21 @@ async fn main() {
         }
         receiver_mode = false;
     }
-        
+
     let sink = Sink::try_new(&stream_handle).unwrap();
     // For each beam or audio routing, generate a tts file and then play it.
     for _ in 0..1 {
-        play_loop(
+        play_on_each_ch(
             default_outputs as usize,
             &active_channels_map,
-            gain, 
-            sr, 
-            &filepath, 
+            gain,
+            sr,
+            &filepath,
             &sink,
-            receiver_mode
+            receiver_mode,
         );
     }
     sink.sleep_until_end();
 
-    cleanup(&filepath);
+    remove(&filepath);
 }
