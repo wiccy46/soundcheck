@@ -70,6 +70,15 @@ async fn main() {
         .author("Jiajun Yang")
         .about("Play sound on specific channels to make sure there are sound.")
         .arg(
+            Arg::with_name("device")
+                .short("d")
+                .long("device")
+                .value_name("DEVICE")
+                .help("Device name to play on, use --help to list available devices")
+                .takes_value(true)
+                .default_value("default"),
+        )
+        .arg(
             Arg::with_name("gain")
                 .short("g")
                 .long("gain")
@@ -80,20 +89,18 @@ async fn main() {
                 .validator(gain_validator),
         )
         .arg(
-            Arg::with_name("device")
-                .short("d")
-                .long("device")
-                .value_name("DEVICE")
-                .help("Device name to play on, use --help to list available devices")
-                .takes_value(true)
-                .default_value("default"),
+            Arg::with_name("generic")
+                .long("generic")
+                .value_name("GENERIC")
+                .help("If the flat is set, don't use NEBULA_API_URL to find active channels, play on all channels")
+                .takes_value(false),
         )
         .arg(
             Arg::with_name("receivers")
                 .short("r")
                 .long("receivers")
                 .value_name("RECEIVERS")
-                .help("If set to true, speake out the name of the receivers")
+                .help("If the flag is set, speake out the name of the receivers")
                 .takes_value(false),
         )
         .arg(
@@ -135,29 +142,35 @@ async fn main() {
     // Look at the Nebula API to find active channels 
     let ac_result = active_channels(&base_url).await; 
 
-    match ac_result {
-        Ok(ac) => {
-            active_channels_map = ac;
-            println!("Active channels: ");
-            for (k, v) in &active_channels_map {
-                println!("{}: {}", v, k + 1);
+    let generic_mode = matches.is_present("generic");
+    let mut receiver_mode = matches.is_present("receivers");
+
+    if !generic_mode {
+        match ac_result {
+            Ok(ac) => {
+                active_channels_map = ac;
+                println!("Active channels: ");
+                for (k, v) in &active_channels_map {
+                    println!("{}: {}", v, k + 1);
+                }
+            }
+            Err(e) => {
+                // Create a default channel map based on default outputs
+                for i in 0..default_outputs {
+                    active_channels_map.insert(i, i.to_string());
+                }
+                println!("Failed to find active channels, play on all default channels.");
+                println!("Error: {}", e);
             }
         }
-        Err(e) => {
-            // Create a default channel map based on default outputs
-            for i in 0..default_outputs {
-                active_channels_map.insert(i, i.to_string());
-            }
-            println!("Failed to find active channels, play on all default channels.");
-            println!("Error: {}", e);
+    } else {
+        for i in 0..default_outputs {
+            active_channels_map.insert(i, i.to_string());
         }
+        receiver_mode = false;
     }
         
     let sink = Sink::try_new(&stream_handle).unwrap();
-
-
-    let receiver_mode = matches.is_present("receivers");
-
     // For each beam or audio routing, generate a tts file and then play it.
     for _ in 0..1 {
         play_loop(
@@ -170,7 +183,7 @@ async fn main() {
             receiver_mode
         );
     }
-
     sink.sleep_until_end();
+
     cleanup(&filepath);
 }
