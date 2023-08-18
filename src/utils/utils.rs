@@ -9,7 +9,6 @@ pub fn remove(f: &Path) {
     }
 }
 
-
 pub fn linear_gain_validator(val: String) -> Result<(), String> {
     match val.parse::<f32>() {
         Ok(v) if v >= 0.0 && v <= 1.0 => Ok(()),
