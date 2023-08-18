@@ -19,6 +19,37 @@ use audio::audio::{get_output_stream, list_host_devices, play, ResampleBuffer};
 use nebula::nebula::active_channels;
 use utils::utils::{linear_gain_validator, remove};
 
+fn get_generic_channel_map(gain_vec_size: u16) -> BTreeMap<u16, String> {
+    let mut active_channels_map: BTreeMap<u16, String> = BTreeMap::new();
+    for i in 0..gain_vec_size {
+        active_channels_map.insert(i, i.to_string());
+    }
+    active_channels_map
+}
+
+async fn get_holoplot_channel_map(base_url: &Url, gain_vec_size: u16) -> BTreeMap<u16, String> {
+    let mut active_channels_map: BTreeMap<u16, String> = BTreeMap::new();
+    // Look at the Nebula API to find active channels
+    let ac_result = active_channels(base_url).await;
+    match ac_result {
+        Ok(ac) => {
+            active_channels_map = ac;
+            println!("Active channels: ");
+            for (k, v) in &active_channels_map {
+                println!("{}: {}", v, k + 1);
+            }
+        }
+        Err(e) => {
+            // Create a default channel map based on default outputs
+            for i in 0..gain_vec_size {
+                active_channels_map.insert(i, i.to_string());
+            }
+            println!("Failed to find active channels, play on all default channels.");
+            println!("Error: {}", e);
+        }
+    }
+    active_channels_map
+}
 
 // Base on the channel map, play sound on each channel with out channels muted
 fn play_on_each_ch(
@@ -84,13 +115,6 @@ async fn main() {
                 .validator(linear_gain_validator),
         )
         .arg(
-            Arg::with_name("generic")
-                .long("generic")
-                .value_name("GENERIC")
-                .help("If the flat is set, don't use NEBULA_API_URL to find active channels, play on all channels")
-                .takes_value(false),
-        )
-        .arg(
             Arg::with_name("receivers")
                 .short("r")
                 .long("receivers")
@@ -106,11 +130,7 @@ async fn main() {
                 .help("Sets the samplerate of the output device")
                 .takes_value(true)
                 .default_value("48000")
-                .validator(|x| {
-                    x.parse::<u32>()
-                        .map(|_| ())
-                        .map_err(|e| e.to_string())
-                }),
+                .validator(|x| x.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())),
         )
         .arg(
             Arg::with_name("help")
@@ -132,63 +152,38 @@ async fn main() {
         .unwrap()
         .parse()
         .expect("Expect float number");
-
-    // make sure url ends with a slash
-    let base_url_str =
-        env::var("NEBULA_API_URL").unwrap_or_else(|_| "http://localhost:5555".to_string());
-    let base_url = Url::parse(&base_url_str).expect("Failed to parse BASE_URL");
-
-    let device = matches.value_of("device").unwrap();
     let filepath = env::current_dir().unwrap().join("resources/to_play.mp3");
 
-    let mut active_channels_map: BTreeMap<u16, String> = BTreeMap::new();
-
+    let device = matches.value_of("device").unwrap();
     let sr = matches
         .value_of("samplerate")
         .unwrap()
         .parse()
         .expect("Expect possitive integer.");
 
-    let (_stream, stream_handle, default_outputs) = get_output_stream(&device, sr);
-    println!("Device default outputs: {}", default_outputs);
+    let (_stream, stream_handle, device_ch_count) = get_output_stream(&device, sr);
+    println!("Device outputs: {}", device_ch_count);
 
-    // Look at the Nebula API to find active channels
-    let ac_result = active_channels(&base_url).await;
+    let receiver_mode = matches.is_present("receivers");
+    // make sure url ends with a slash
+    let base_url_str = env::var("NEBULA_API_URL").unwrap_or_else(|_| "".to_string());
 
-    let generic_mode = matches.is_present("generic");
-    let mut receiver_mode = matches.is_present("receivers");
-
-    if !generic_mode {
-        match ac_result {
-            Ok(ac) => {
-                active_channels_map = ac;
-                println!("Active channels: ");
-                for (k, v) in &active_channels_map {
-                    println!("{}: {}", v, k + 1);
-                }
-            }
-            Err(e) => {
-                // Create a default channel map based on default outputs
-                for i in 0..default_outputs {
-                    active_channels_map.insert(i, i.to_string());
-                }
-                println!("Failed to find active channels, play on all default channels.");
-                println!("Error: {}", e);
-            }
-        }
+    let active_channel_map = if base_url_str.is_empty() {
+        println!("No NEBULA_API_URL is set, play on default channels.");
+        get_generic_channel_map(device_ch_count)
     } else {
-        for i in 0..default_outputs {
-            active_channels_map.insert(i, i.to_string());
-        }
-        receiver_mode = false;
-    }
+        println!("Detecting system's active audio receivers...");
+        let base_url = Url::parse(&base_url_str).expect("Failed to parse BASE_URL");
+        get_holoplot_channel_map(&base_url, device_ch_count).await
+    };
 
+    // Start playing sound
     let sink = Sink::try_new(&stream_handle).unwrap();
     // For each beam or audio routing, generate a tts file and then play it.
     for _ in 0..1 {
         play_on_each_ch(
-            default_outputs as usize,
-            &active_channels_map,
+            device_ch_count as usize,
+            &active_channel_map,
             gain,
             sr,
             &filepath,
