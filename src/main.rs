@@ -104,6 +104,20 @@ async fn main() {
                 .takes_value(false),
         )
         .arg(
+            Arg::with_name("samplerate")
+                .short("s")
+                .long("samplerate")
+                .value_name("SAMPLERATE")
+                .help("Sets the samplerate of the output device")
+                .takes_value(true)
+                .default_value("48000")
+                .validator(|x| {
+                    x.parse::<u32>()
+                        .map(|_| ())
+                        .map_err(|e| e.to_string())
+                }),
+        )
+        .arg(
             Arg::with_name("help")
                 .short("h")
                 .long("help")
@@ -135,8 +149,13 @@ async fn main() {
 
     let mut active_channels_map: BTreeMap<u16, String> = BTreeMap::new();
 
-    let (_stream, stream_handle, device_sr, default_outputs) = get_output_stream(&device);
-    println!("Device sample rate: {}", device_sr);
+    let sr = matches
+        .value_of("samplerate")
+        .unwrap()
+        .parse()
+        .expect("Expect possitive integer.");
+
+    let (_stream, stream_handle, default_outputs) = get_output_stream(&device, sr);
     println!("Device default outputs: {}", default_outputs);
 
     // Look at the Nebula API to find active channels 
@@ -177,7 +196,7 @@ async fn main() {
             default_outputs as usize,
             &active_channels_map,
             gain, 
-            device_sr, 
+            sr, 
             &filepath, 
             &sink,
             receiver_mode
