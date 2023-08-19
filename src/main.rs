@@ -3,7 +3,6 @@ mod nebula;
 mod utils;
 
 use clap::{App, Arg};
-use gtts::save_to_file;
 use rodio::*;
 use std::collections::BTreeMap;
 use std::env;
@@ -16,6 +15,7 @@ use url::Url;
 use rodio::source::UniformSourceIterator;
 
 use audio::audio::{get_output_stream, list_host_devices, play, ResampleBuffer};
+use audio::gtts::save_to_file;
 use nebula::nebula::active_channels;
 use utils::utils::{linear_gain_validator, remove};
 
@@ -52,7 +52,7 @@ async fn get_holoplot_channel_map(base_url: &Url, gain_vec_size: u16) -> BTreeMa
 }
 
 // Base on the channel map, play sound on each channel with out channels muted
-fn play_on_each_ch(
+async fn play_on_each_ch(
     channels: usize,
     channel_map: &BTreeMap<u16, String>,
     gain: f32,
@@ -75,7 +75,7 @@ fn play_on_each_ch(
                 content = ch.to_string();
             }
 
-            save_to_file(content.as_str(), filepath.to_str().unwrap());
+            save_to_file(content.as_str(), filepath.to_str().unwrap()).await;
             let file = File::open(filepath.clone()).unwrap();
             let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
 
@@ -189,7 +189,7 @@ async fn main() {
             &filepath,
             &sink,
             receiver_mode,
-        );
+        ).await;
     }
     sink.sleep_until_end();
 
