@@ -16,6 +16,7 @@ use rodio::source::UniformSourceIterator;
 
 use audio::audio::{get_output_stream, list_host_devices, play, ResampleBuffer};
 use audio::gtts::save_to_file;
+use audio::siggen::PinkNoise;
 use nebula::nebula::active_channels;
 use utils::utils::{linear_gain_validator, remove};
 
@@ -83,7 +84,10 @@ async fn play_on_each_ch(
                 UniformSourceIterator::new(source, 1, device_sr);
             let resample_buffer: ResampleBuffer = resample.buffered();
 
-            play(&sink, &resample_buffer, ch_gains);
+            let pink_noise = PinkNoise::new(48000, 48000 * 2);
+            let pn_buffered = pink_noise.buffered();
+            
+            play(&sink, &pn_buffered, ch_gains);
             thread::sleep(time::Duration::from_millis(1000));
         }
     }
